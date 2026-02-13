@@ -14,7 +14,6 @@ const isAuthor = role === 'author';
 <html lang="en">
   <head>
     <BaseHead title="Valentine's Albums" description="Private Valentine's Day memory albums" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   </head>
   <body class="page">
     <main>
@@ -47,8 +46,11 @@ const isAuthor = role === 'author';
               <input id="lng" type="hidden" />
               <label for="photos">Photos (optional for edit)</label>
               <input id="photos" type="file" accept="image/*" multiple />
-              <div id="picker-map" aria-label="Pick location by dropping a pin"></div>
-              <small id="map-help">Tap/click the map to drop a pin.</small>
+              <div id="picker-map" class="picker-map" aria-label="Pick location by dropping a pin">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/World_map_-_low_resolution.svg/1280px-World_map_-_low_resolution.svg.png" alt="World map picker" />
+                <span id="pin">📍</span>
+              </div>
+              <small id="map-help">Tap/click the map to drop a pin. The pin location will be saved.</small>
               <button type="submit" class="primary">Save Album</button>
             </form>
           </section>
@@ -57,14 +59,12 @@ const isAuthor = role === 'author';
     </main>
 
     <script type="application/json" id="default-albums" set:html={albumsJson}></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script is:inline define:vars={{ isAuthor }}>
       const defaults = JSON.parse(document.querySelector('#default-albums')?.textContent || '[]');
       const storeKey = 'valentine-custom-albums';
       const albumGrid = document.querySelector('#album-grid');
-
-      let map;
-      let marker;
+      const mapPicker = document.querySelector('#picker-map');
+      const pin = document.querySelector('#pin');
 
       const getAlbums = () => {
         const custom = JSON.parse(localStorage.getItem(storeKey) || '[]');
@@ -74,29 +74,38 @@ const isAuthor = role === 'author';
       const saveCustomAlbums = (albums) => localStorage.setItem(storeKey, JSON.stringify(albums));
       const toAlbumLink = (id) => `/albums/${encodeURIComponent(id)}`;
 
+      const positionFromLatLng = (lat, lng) => ({
+        x: Math.max(0, Math.min(1, (lng + 180) / 360)),
+        y: Math.max(0, Math.min(1, (90 - lat) / 180)),
+      });
+
+      const latLngFromPosition = (x, y) => ({
+        lat: Number((90 - y * 180).toFixed(6)),
+        lng: Number((x * 360 - 180).toFixed(6)),
+      });
+
       const setPin = (lat, lng) => {
         const latInput = document.querySelector('#lat');
         const lngInput = document.querySelector('#lng');
         if (latInput) latInput.value = String(lat);
         if (lngInput) lngInput.value = String(lng);
 
-        if (!map) return;
-        if (!marker) marker = L.marker([lat, lng]).addTo(map);
-        marker.setLatLng([lat, lng]);
-        map.panTo([lat, lng]);
+        if (!pin) return;
+        const pos = positionFromLatLng(lat, lng);
+        pin.style.left = `${pos.x * 100}%`;
+        pin.style.top = `${pos.y * 100}%`;
+        pin.classList.add('visible');
       };
 
       const initPickerMap = () => {
-        if (!isAuthor) return;
-        map = L.map('picker-map').setView([22.3, 114.17], 4);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors',
-        }).addTo(map);
+        if (!isAuthor || !mapPicker || !pin) return;
 
-        map.on('click', (event) => {
-          const { lat, lng } = event.latlng;
-          setPin(Number(lat.toFixed(6)), Number(lng.toFixed(6)));
+        mapPicker.addEventListener('click', (event) => {
+          const rect = mapPicker.getBoundingClientRect();
+          const x = (event.clientX - rect.left) / rect.width;
+          const y = (event.clientY - rect.top) / rect.height;
+          const { lat, lng } = latLngFromPosition(x, y);
+          setPin(lat, lng);
         });
       };
 
@@ -193,10 +202,7 @@ const isAuthor = role === 'author';
         document.querySelector('#albumId').value = '';
         document.querySelector('#lat').value = '';
         document.querySelector('#lng').value = '';
-        if (marker) {
-          map.removeLayer(marker);
-          marker = null;
-        }
+        pin?.classList.remove('visible');
         renderAlbums();
       });
 
@@ -242,6 +248,30 @@ const isAuthor = role === 'author';
   form { display: grid; gap: .8rem; }
   input, button { padding: .72rem .8rem; border-radius: 12px; border: 1px solid #e8c3d3; }
   label { color: #555; font-size: .92rem; }
-  #picker-map { height: 320px; width: 100%; border-radius: 16px; border: 1px solid #e8c3d3; overflow: hidden; }
+  .picker-map {
+    position: relative;
+    height: 320px;
+    width: 100%;
+    border-radius: 16px;
+    border: 1px solid #e8c3d3;
+    overflow: hidden;
+    cursor: crosshair;
+    background: #fff;
+  }
+  .picker-map img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    user-select: none;
+    pointer-events: none;
+  }
+  #pin {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    font-size: 1.5rem;
+    display: none;
+    pointer-events: none;
+  }
+  #pin.visible { display: block; }
   #map-help { color: #666; }
 </style>
