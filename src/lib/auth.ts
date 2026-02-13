@@ -1,7 +1,20 @@
 export const AUTH_COOKIE = 'valentine_session';
+export const AUTH_ROLE_COOKIE = 'valentine_role';
 
-export const AUTH_USERNAME = 'valentine';
-export const AUTH_PASSWORD = 'forever2026';
+export const AUTH_USERS = {
+  author: {
+    username: 'author',
+    password: 'authorLove2026!',
+    role: 'author',
+  },
+  visitor: {
+    username: 'visitor',
+    password: 'visitorLove2026!',
+    role: 'visitor',
+  },
+} as const;
+
+export type AuthRole = (typeof AUTH_USERS)[keyof typeof AUTH_USERS]['role'];
 
 export const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxGanqadOwWNKk+2BU2LG

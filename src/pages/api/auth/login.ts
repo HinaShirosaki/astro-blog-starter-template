@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { privateDecrypt, constants } from 'node:crypto';
-import { AUTH_COOKIE, AUTH_PASSWORD, AUTH_USERNAME, PRIVATE_KEY_PEM } from '../../../lib/auth';
+import { AUTH_COOKIE, AUTH_ROLE_COOKIE, AUTH_USERS, PRIVATE_KEY_PEM } from '../../../lib/auth';
 
 export const prerender = false;
 
@@ -23,17 +23,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     ).toString('utf-8');
 
     const { username, password } = JSON.parse(decrypted) as { username?: string; password?: string };
+    const account = Object.values(AUTH_USERS).find(
+      (candidate) => candidate.username === username && candidate.password === password,
+    );
 
-    if (username === AUTH_USERNAME && password === AUTH_PASSWORD) {
-      cookies.set(AUTH_COOKIE, 'ok', {
+    if (account) {
+      const secure = new URL(request.url).protocol === 'https:';
+      const options = {
         path: '/',
         httpOnly: true,
-        sameSite: 'strict',
-        secure: new URL(request.url).protocol === 'https:',
+        sameSite: 'strict' as const,
+        secure,
         maxAge: 60 * 60 * 8,
-      });
+      };
 
-      return new Response(JSON.stringify({ success: true }), {
+      cookies.set(AUTH_COOKIE, 'ok', options);
+      cookies.set(AUTH_ROLE_COOKIE, account.role, options);
+
+      return new Response(JSON.stringify({ success: true, role: account.role }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
