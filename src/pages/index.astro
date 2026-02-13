@@ -14,6 +14,7 @@ const isAuthor = role === 'author';
 <html lang="en">
   <head>
     <BaseHead title="Valentine's Albums" description="Private Valentine's Day memory albums" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   </head>
   <body class="page">
     <main>
@@ -36,25 +37,18 @@ const isAuthor = role === 'author';
         isAuthor && (
           <section class="manager glass">
             <h2>Album Manager</h2>
-            <p>Create or edit albums. Photos and edits are stored in your browser.</p>
+            <p>Create or edit albums. Drop a pin on the map to set the location.</p>
             <form id="album-form">
               <input id="albumId" type="hidden" />
               <input id="title" placeholder="Album title" required />
               <input id="description" placeholder="Description" required />
               <input id="locationLabel" placeholder="Location label" required />
-              <div class="map-grid">
-                <input id="lat" type="number" step="0.0001" placeholder="Latitude" required />
-                <input id="lng" type="number" step="0.0001" placeholder="Longitude" required />
-              </div>
+              <input id="lat" type="hidden" />
+              <input id="lng" type="hidden" />
               <label for="photos">Photos (optional for edit)</label>
               <input id="photos" type="file" accept="image/*" multiple />
-              <iframe
-                id="picker-map"
-                title="Google map preview"
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-                src="https://maps.google.com/maps?q=22.3,114.17&z=4&output=embed"
-              ></iframe>
+              <div id="picker-map" aria-label="Pick location by dropping a pin"></div>
+              <small id="map-help">Tap/click the map to drop a pin.</small>
               <button type="submit" class="primary">Save Album</button>
             </form>
           </section>
@@ -63,10 +57,14 @@ const isAuthor = role === 'author';
     </main>
 
     <script type="application/json" id="default-albums" set:html={albumsJson}></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script is:inline define:vars={{ isAuthor }}>
       const defaults = JSON.parse(document.querySelector('#default-albums')?.textContent || '[]');
       const storeKey = 'valentine-custom-albums';
       const albumGrid = document.querySelector('#album-grid');
+
+      let map;
+      let marker;
 
       const getAlbums = () => {
         const custom = JSON.parse(localStorage.getItem(storeKey) || '[]');
@@ -75,6 +73,32 @@ const isAuthor = role === 'author';
 
       const saveCustomAlbums = (albums) => localStorage.setItem(storeKey, JSON.stringify(albums));
       const toAlbumLink = (id) => `/albums/${encodeURIComponent(id)}`;
+
+      const setPin = (lat, lng) => {
+        const latInput = document.querySelector('#lat');
+        const lngInput = document.querySelector('#lng');
+        if (latInput) latInput.value = String(lat);
+        if (lngInput) lngInput.value = String(lng);
+
+        if (!map) return;
+        if (!marker) marker = L.marker([lat, lng]).addTo(map);
+        marker.setLatLng([lat, lng]);
+        map.panTo([lat, lng]);
+      };
+
+      const initPickerMap = () => {
+        if (!isAuthor) return;
+        map = L.map('picker-map').setView([22.3, 114.17], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        map.on('click', (event) => {
+          const { lat, lng } = event.latlng;
+          setPin(Number(lat.toFixed(6)), Number(lng.toFixed(6)));
+        });
+      };
 
       const renderAlbums = () => {
         albumGrid.innerHTML = '';
@@ -102,17 +126,6 @@ const isAuthor = role === 'author';
 
       const form = document.querySelector('#album-form');
 
-      const updateMapPreview = () => {
-        const lat = document.querySelector('#lat')?.value;
-        const lng = document.querySelector('#lng')?.value;
-        if (!lat || !lng) return;
-        const map = document.querySelector('#picker-map');
-        map.src = `https://maps.google.com/maps?q=${lat},${lng}&z=12&output=embed`;
-      };
-
-      document.querySelector('#lat')?.addEventListener('change', updateMapPreview);
-      document.querySelector('#lng')?.addEventListener('change', updateMapPreview);
-
       albumGrid?.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLButtonElement) || !target.classList.contains('edit')) return;
@@ -125,9 +138,7 @@ const isAuthor = role === 'author';
         document.querySelector('#title').value = album.title;
         document.querySelector('#description').value = album.description;
         document.querySelector('#locationLabel').value = album.locationLabel;
-        document.querySelector('#lat').value = album.lat;
-        document.querySelector('#lng').value = album.lng;
-        updateMapPreview();
+        setPin(album.lat, album.lng);
         form?.scrollIntoView({ behavior: 'smooth' });
       });
 
@@ -149,19 +160,27 @@ const isAuthor = role === 'author';
           }),
         );
 
+        const lat = Number(document.querySelector('#lat').value);
+        const lng = Number(document.querySelector('#lng').value);
+
         const album = {
           id: editingId || crypto.randomUUID(),
           title: document.querySelector('#title').value,
           description: document.querySelector('#description').value,
           locationLabel: document.querySelector('#locationLabel').value,
-          lat: Number(document.querySelector('#lat').value),
-          lng: Number(document.querySelector('#lng').value),
+          lat,
+          lng,
           cover: photos[0]?.src || existing?.cover,
           photos: photos.length ? photos : existing?.photos || [],
         };
 
         if (!album.cover || !album.photos.length) {
           window.alert('Please upload at least one photo when creating a new album.');
+          return;
+        }
+
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+          window.alert('Please drop a pin on the map to set the album location.');
           return;
         }
 
@@ -172,10 +191,17 @@ const isAuthor = role === 'author';
         saveCustomAlbums(current);
         form.reset();
         document.querySelector('#albumId').value = '';
+        document.querySelector('#lat').value = '';
+        document.querySelector('#lng').value = '';
+        if (marker) {
+          map.removeLayer(marker);
+          marker = null;
+        }
         renderAlbums();
       });
 
       renderAlbums();
+      initPickerMap();
     </script>
   </body>
 </html>
@@ -216,6 +242,6 @@ const isAuthor = role === 'author';
   form { display: grid; gap: .8rem; }
   input, button { padding: .72rem .8rem; border-radius: 12px; border: 1px solid #e8c3d3; }
   label { color: #555; font-size: .92rem; }
-  .map-grid { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
-  #picker-map { height: 320px; width: 100%; border-radius: 16px; border: 1px solid #e8c3d3; }
+  #picker-map { height: 320px; width: 100%; border-radius: 16px; border: 1px solid #e8c3d3; overflow: hidden; }
+  #map-help { color: #666; }
 </style>
