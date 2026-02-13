@@ -17,11 +17,14 @@ const isAuthor = role === 'author';
   </head>
   <body class="page">
     <main>
-      <section class="hero">
-        <h1>💘 Our Valentine's Collection</h1>
-        <p>Browse your albums as visitor or manage them as author.</p>
-        <p class="role-badge">Signed in as: <strong>{role}</strong></p>
-        <button id="logout">Lock site</button>
+      <section class="hero glass">
+        <p class="eyebrow">Shared memories</p>
+        <h1>Valentine Albums</h1>
+        <p class="subtitle">Apple-inspired clean layout with a soft pink tone.</p>
+        <div class="hero-actions">
+          <p class="role">Signed in as <strong>{role}</strong></p>
+          <button id="logout">Sign out</button>
+        </div>
       </section>
 
       <section>
@@ -31,19 +34,19 @@ const isAuthor = role === 'author';
 
       {
         isAuthor && (
-          <section class="manager">
-            <h2>Album Manager (Author)</h2>
-            <p>Upload images, add map details, and create or edit albums.</p>
+          <section class="manager glass">
+            <h2>Album Manager</h2>
+            <p>Create or edit albums. Photos and edits are stored in your browser.</p>
             <form id="album-form">
               <input id="albumId" type="hidden" />
               <input id="title" placeholder="Album title" required />
               <input id="description" placeholder="Description" required />
-              <input id="locationLabel" placeholder="Location label (e.g. Paris, France)" required />
+              <input id="locationLabel" placeholder="Location label" required />
               <div class="map-grid">
                 <input id="lat" type="number" step="0.0001" placeholder="Latitude" required />
                 <input id="lng" type="number" step="0.0001" placeholder="Longitude" required />
               </div>
-              <label for="photos">Photos for new album (optional when editing):</label>
+              <label for="photos">Photos (optional for edit)</label>
               <input id="photos" type="file" accept="image/*" multiple />
               <iframe
                 id="picker-map"
@@ -52,7 +55,7 @@ const isAuthor = role === 'author';
                 referrerpolicy="no-referrer-when-downgrade"
                 src="https://maps.google.com/maps?q=22.3,114.17&z=4&output=embed"
               ></iframe>
-              <button type="submit">Save Album</button>
+              <button type="submit" class="primary">Save Album</button>
             </form>
           </section>
         )
@@ -70,10 +73,7 @@ const isAuthor = role === 'author';
         return [...defaults, ...custom];
       };
 
-      const saveCustomAlbums = (albums) => {
-        localStorage.setItem(storeKey, JSON.stringify(albums));
-      };
-
+      const saveCustomAlbums = (albums) => localStorage.setItem(storeKey, JSON.stringify(albums));
       const toAlbumLink = (id) => `/albums/${encodeURIComponent(id)}`;
 
       const renderAlbums = () => {
@@ -145,7 +145,6 @@ const isAuthor = role === 'author';
               reader.onload = () => resolve(reader.result);
               reader.readAsDataURL(file);
             });
-
             return { src, alt: `${file.name}-${index + 1}` };
           }),
         );
@@ -182,20 +181,41 @@ const isAuthor = role === 'author';
 </html>
 
 <style>
-  .page { background: linear-gradient(180deg,#fff0f5,#ffd7e4 45%,#fff); min-height: 100vh; color: #52152f; }
+  :root { color-scheme: light; }
+  .page {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #fff1f6 0%, #f5f5f7 55%, #ffffff 100%);
+    color: #1d1d1f;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  }
   main { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; display: grid; gap: 1.5rem; }
-  .hero { background: linear-gradient(120deg,#ff6ca0,#ff3d80); color: #fff; border-radius: 20px; padding: 2rem; box-shadow: 0 12px 30px rgba(196,18,85,.28); }
-  .role-badge { margin-bottom: 1rem; }
-  #logout { border: 0; border-radius: 999px; padding: .65rem 1rem; cursor: pointer; }
-  .album-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill,minmax(320px,1fr)); }
-  .card { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #ffd0df; box-shadow: 0 10px 20px rgba(128,32,71,.1); }
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 190, 215, 0.65);
+    border-radius: 28px;
+    box-shadow: 0 24px 50px rgba(245, 143, 183, 0.18);
+    backdrop-filter: blur(18px);
+  }
+  .hero { padding: 2rem; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .08em; color: #cd4e87; font-size: .75rem; margin: 0 0 .35rem; }
+  h1 { margin: 0; font-size: clamp(2rem, 5vw, 3rem); }
+  .subtitle { margin: .55rem 0 1rem; color: #555; }
+  .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+  .role { margin: 0; background: #fff6fa; border: 1px solid #ffd3e4; border-radius: 999px; padding: .45rem .8rem; }
+  #logout, .primary { border: 0; border-radius: 999px; padding: .65rem 1rem; background: #1d1d1f; color: #fff; cursor: pointer; }
+  h2 { margin: .2rem 0 .8rem; font-size: 1.6rem; }
+  .album-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .card { overflow: hidden; border-radius: 22px; background: #fff; border: 1px solid #f0d4df; box-shadow: 0 16px 24px rgba(0, 0, 0, .06); }
   .album-link { color: inherit; text-decoration: none; display: block; }
-  .card img { width: 100%; height: 260px; object-fit: cover; border-radius: 0; }
-  .card .content { padding: 1rem; }
-  .edit { margin: 0 1rem 1rem; border-radius: 10px; border: 1px solid #f4a6c0; padding: .65rem .8rem; cursor: pointer; }
-  .manager { background: #fff; border: 1px solid #ffd0df; border-radius: 18px; padding: 1rem; }
+  .card img { width: 100%; height: 300px; object-fit: cover; display: block; }
+  .content { padding: 1rem 1rem .6rem; }
+  .content strong { font-size: 1.1rem; }
+  .content p { color: #555; margin-top: .45rem; }
+  .edit { margin: 0 1rem 1rem; border: 1px solid #e7b4cb; border-radius: 12px; background: #fff8fb; padding: .55rem .8rem; cursor: pointer; }
+  .manager { padding: 1.3rem; }
   form { display: grid; gap: .8rem; }
-  input, button { padding: .75rem; border-radius: 10px; border: 1px solid #f4a6c0; }
+  input, button { padding: .72rem .8rem; border-radius: 12px; border: 1px solid #e8c3d3; }
+  label { color: #555; font-size: .92rem; }
   .map-grid { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
-  #picker-map { height: 320px; width: 100%; border-radius: 12px; border: 1px solid #f4a6c0; }
+  #picker-map { height: 320px; width: 100%; border-radius: 16px; border: 1px solid #e8c3d3; }
 </style>
