@@ -1,21 +1,31 @@
 ---
 import BaseHead from '../components/BaseHead.astro';
 import { defaultAlbums } from '../data/albums';
+import { AUTH_ROLE_COOKIE } from '../lib/auth';
+
+export const prerender = false;
+
 const albumsJson = JSON.stringify(defaultAlbums);
+const role = Astro.cookies.get(AUTH_ROLE_COOKIE)?.value ?? 'visitor';
+const isAuthor = role === 'author';
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
     <BaseHead title="Valentine's Albums" description="Private Valentine's Day memory albums" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   </head>
   <body class="page">
     <main>
-      <section class="hero">
-        <h1>💘 Our Valentine's Collection</h1>
-        <p>Tap an album for a photo story + map pin for where each memory happened.</p>
-        <button id="logout">Lock site</button>
+      <section class="hero glass">
+        <p class="eyebrow">Shared memories</p>
+        <h1>Valentine Albums</h1>
+        <p class="subtitle">Apple-inspired clean layout with a soft pink tone.</p>
+        <div class="hero-actions">
+          <p class="role">Signed in as <strong>{role}</strong></p>
+          <button id="logout">Sign out</button>
+        </div>
       </section>
 
       <section>
@@ -23,157 +33,215 @@ const albumsJson = JSON.stringify(defaultAlbums);
         <div id="album-grid" class="album-grid"></div>
       </section>
 
-      <section class="manager">
-        <h2>Album Manager</h2>
-        <p>Upload images, set a pin on the map, and save instantly (stored in your browser).</p>
-        <form id="album-form">
-          <input id="title" placeholder="Album title" required />
-          <input id="description" placeholder="Description" required />
-          <input id="locationLabel" placeholder="Location label (e.g. Paris, France)" required />
-          <div class="map-grid">
-            <input id="lat" type="number" step="0.0001" placeholder="Latitude" required />
-            <input id="lng" type="number" step="0.0001" placeholder="Longitude" required />
-          </div>
-          <input id="photos" type="file" accept="image/*" multiple required />
-          <div id="picker-map"></div>
-          <button type="submit">Save Album</button>
-        </form>
-      </section>
+      {
+        isAuthor && (
+          <section class="manager glass">
+            <h2>Album Manager</h2>
+            <p>Create or edit albums. Drop a pin on the map to set the location.</p>
+            <form id="album-form">
+              <input id="albumId" type="hidden" />
+              <input id="title" placeholder="Album title" required />
+              <input id="description" placeholder="Description" required />
+              <input id="locationLabel" placeholder="Location label" required />
+              <input id="lat" type="hidden" />
+              <input id="lng" type="hidden" />
+              <label for="photos">Photos (optional for edit)</label>
+              <input id="photos" type="file" accept="image/*" multiple />
+              <div id="picker-map" aria-label="Pick location by dropping a pin"></div>
+              <small id="map-help">Tap/click the map to drop a pin.</small>
+              <button type="submit" class="primary">Save Album</button>
+            </form>
+          </section>
+        )
+      }
     </main>
 
-    <dialog id="album-modal">
-      <article>
-        <button id="close-modal" class="close">✕</button>
-        <h3 id="modal-title"></h3>
-        <p id="modal-description"></p>
-        <div id="modal-photos" class="modal-photos"></div>
-        <img id="modal-map" alt="Album location map" />
-      </article>
-    </dialog>
-
     <script type="application/json" id="default-albums" set:html={albumsJson}></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script is:inline define:vars={{ isAuthor }}>
+      const defaults = JSON.parse(document.querySelector('#default-albums')?.textContent || '[]');
+      const storeKey = 'valentine-custom-albums';
+      const albumGrid = document.querySelector('#album-grid');
+
+      let map;
+      let marker;
+
+      const getAlbums = () => {
+        const custom = JSON.parse(localStorage.getItem(storeKey) || '[]');
+        return [...defaults, ...custom];
+      };
+
+      const saveCustomAlbums = (albums) => localStorage.setItem(storeKey, JSON.stringify(albums));
+      const toAlbumLink = (id) => `/albums/${encodeURIComponent(id)}`;
+
+      const setPin = (lat, lng) => {
+        const latInput = document.querySelector('#lat');
+        const lngInput = document.querySelector('#lng');
+        if (latInput) latInput.value = String(lat);
+        if (lngInput) lngInput.value = String(lng);
+
+        if (!map) return;
+        if (!marker) marker = L.marker([lat, lng]).addTo(map);
+        marker.setLatLng([lat, lng]);
+        map.panTo([lat, lng]);
+      };
+
+      const initPickerMap = () => {
+        if (!isAuthor) return;
+        map = L.map('picker-map').setView([22.3, 114.17], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        map.on('click', (event) => {
+          const { lat, lng } = event.latlng;
+          setPin(Number(lat.toFixed(6)), Number(lng.toFixed(6)));
+        });
+      };
+
+      const renderAlbums = () => {
+        albumGrid.innerHTML = '';
+        getAlbums().forEach((album) => {
+          const card = document.createElement('article');
+          card.className = 'card';
+          card.innerHTML = `
+            <a href="${toAlbumLink(album.id)}" class="album-link">
+              <img src="${album.cover}" alt="${album.title}" />
+              <div class="content">
+                <strong>${album.title}</strong>
+                <p>${album.description}</p>
+              </div>
+            </a>
+            ${isAuthor ? `<button class="edit" data-album-id="${album.id}">Edit</button>` : ''}
+          `;
+          albumGrid.append(card);
+        });
+      };
+
+      document.querySelector('#logout')?.addEventListener('click', async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login';
+      });
+
+      const form = document.querySelector('#album-form');
+
+      albumGrid?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement) || !target.classList.contains('edit')) return;
+
+        const albumId = target.dataset.albumId;
+        const album = getAlbums().find((item) => item.id === albumId);
+        if (!album) return;
+
+        document.querySelector('#albumId').value = album.id;
+        document.querySelector('#title').value = album.title;
+        document.querySelector('#description').value = album.description;
+        document.querySelector('#locationLabel').value = album.locationLabel;
+        setPin(album.lat, album.lng);
+        form?.scrollIntoView({ behavior: 'smooth' });
+      });
+
+      form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const current = JSON.parse(localStorage.getItem(storeKey) || '[]');
+        const editingId = document.querySelector('#albumId').value;
+        const existing = getAlbums().find((album) => album.id === editingId);
+
+        const files = Array.from(document.querySelector('#photos').files || []);
+        const photos = await Promise.all(
+          files.map(async (file, index) => {
+            const src = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.readAsDataURL(file);
+            });
+            return { src, alt: `${file.name}-${index + 1}` };
+          }),
+        );
+
+        const lat = Number(document.querySelector('#lat').value);
+        const lng = Number(document.querySelector('#lng').value);
+
+        const album = {
+          id: editingId || crypto.randomUUID(),
+          title: document.querySelector('#title').value,
+          description: document.querySelector('#description').value,
+          locationLabel: document.querySelector('#locationLabel').value,
+          lat,
+          lng,
+          cover: photos[0]?.src || existing?.cover,
+          photos: photos.length ? photos : existing?.photos || [],
+        };
+
+        if (!album.cover || !album.photos.length) {
+          window.alert('Please upload at least one photo when creating a new album.');
+          return;
+        }
+
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+          window.alert('Please drop a pin on the map to set the album location.');
+          return;
+        }
+
+        const index = current.findIndex((item) => item.id === album.id);
+        if (index >= 0) current[index] = album;
+        else current.push(album);
+
+        saveCustomAlbums(current);
+        form.reset();
+        document.querySelector('#albumId').value = '';
+        document.querySelector('#lat').value = '';
+        document.querySelector('#lng').value = '';
+        if (marker) {
+          map.removeLayer(marker);
+          marker = null;
+        }
+        renderAlbums();
+      });
+
+      renderAlbums();
+      initPickerMap();
+    </script>
   </body>
 </html>
 
 <style>
-  .page { background: linear-gradient(180deg,#fff0f5,#ffd7e4 45%,#fff); min-height: 100vh; color: #52152f; }
-  main { width: min(1020px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; display: grid; gap: 1.5rem; }
-  .hero { background: linear-gradient(120deg,#ff6ca0,#ff3d80); color: #fff; border-radius: 20px; padding: 2rem; box-shadow: 0 12px 30px rgba(196,18,85,.28); }
-  #logout { border: 0; border-radius: 999px; padding: .65rem 1rem; cursor: pointer; }
-  .album-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); }
-  .card { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #ffd0df; box-shadow: 0 10px 20px rgba(128,32,71,.1); cursor: pointer; transition: transform .2s ease, box-shadow .25s ease; }
-  .card:hover { transform: translateY(-4px); box-shadow: 0 16px 28px rgba(128,32,71,.2); }
-  .card img { width: 100%; height: 180px; object-fit: cover; border-radius: 0; }
-  .card .content { padding: .85rem; }
-  .manager { background: #fff; border: 1px solid #ffd0df; border-radius: 18px; padding: 1rem; }
+  :root { color-scheme: light; }
+  .page {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #fff1f6 0%, #f5f5f7 55%, #ffffff 100%);
+    color: #1d1d1f;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  }
+  main { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; display: grid; gap: 1.5rem; }
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 190, 215, 0.65);
+    border-radius: 28px;
+    box-shadow: 0 24px 50px rgba(245, 143, 183, 0.18);
+    backdrop-filter: blur(18px);
+  }
+  .hero { padding: 2rem; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .08em; color: #cd4e87; font-size: .75rem; margin: 0 0 .35rem; }
+  h1 { margin: 0; font-size: clamp(2rem, 5vw, 3rem); }
+  .subtitle { margin: .55rem 0 1rem; color: #555; }
+  .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+  .role { margin: 0; background: #fff6fa; border: 1px solid #ffd3e4; border-radius: 999px; padding: .45rem .8rem; }
+  #logout, .primary { border: 0; border-radius: 999px; padding: .65rem 1rem; background: #1d1d1f; color: #fff; cursor: pointer; }
+  h2 { margin: .2rem 0 .8rem; font-size: 1.6rem; }
+  .album-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .card { overflow: hidden; border-radius: 22px; background: #fff; border: 1px solid #f0d4df; box-shadow: 0 16px 24px rgba(0, 0, 0, .06); }
+  .album-link { color: inherit; text-decoration: none; display: block; }
+  .card img { width: 100%; height: 300px; object-fit: cover; display: block; }
+  .content { padding: 1rem 1rem .6rem; }
+  .content strong { font-size: 1.1rem; }
+  .content p { color: #555; margin-top: .45rem; }
+  .edit { margin: 0 1rem 1rem; border: 1px solid #e7b4cb; border-radius: 12px; background: #fff8fb; padding: .55rem .8rem; cursor: pointer; }
+  .manager { padding: 1.3rem; }
   form { display: grid; gap: .8rem; }
-  input, button { padding: .75rem; border-radius: 10px; border: 1px solid #f4a6c0; }
-  .map-grid { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
-  #picker-map { height: 260px; border-radius: 12px; border: 1px solid #f4a6c0; }
-  dialog { border: 0; border-radius: 14px; width: min(860px, calc(100% - 2rem)); }
-  dialog::backdrop { background: rgba(30,0,14,.5); backdrop-filter: blur(2px); }
-  article { position: relative; }
-  .close { position: absolute; top: .5rem; right: .5rem; border: 0; background: #fff; cursor: pointer; }
-  .modal-photos { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: .7rem; margin: .8rem 0; }
-  #modal-map { width: 100%; border-radius: 10px; }
+  input, button { padding: .72rem .8rem; border-radius: 12px; border: 1px solid #e8c3d3; }
+  label { color: #555; font-size: .92rem; }
+  #picker-map { height: 320px; width: 100%; border-radius: 16px; border: 1px solid #e8c3d3; overflow: hidden; }
+  #map-help { color: #666; }
 </style>
-
-<script>
-  const defaults = JSON.parse(document.querySelector('#default-albums')?.textContent || '[]');
-  const storeKey = 'valentine-custom-albums';
-  const albumGrid = document.querySelector('#album-grid');
-  const modal = document.querySelector('#album-modal');
-
-  const getAlbums = () => {
-    const custom = JSON.parse(localStorage.getItem(storeKey) || '[]');
-    return [...defaults, ...custom];
-  };
-
-  const staticMapUrl = (lat, lng) => `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=12&size=900x360&markers=${lat},${lng},red-pushpin`;
-
-  const renderAlbums = () => {
-    albumGrid.innerHTML = '';
-    getAlbums().forEach((album) => {
-      const card = document.createElement('button');
-      card.className = 'card';
-      card.innerHTML = `<img src="${album.cover}" alt="${album.title}" /><div class="content"><strong>${album.title}</strong><p>${album.description}</p></div>`;
-      card.addEventListener('click', () => openAlbum(album));
-      albumGrid.append(card);
-    });
-  };
-
-  const openAlbum = (album) => {
-    document.querySelector('#modal-title').textContent = `${album.title} — ${album.locationLabel}`;
-    document.querySelector('#modal-description').textContent = album.description;
-    document.querySelector('#modal-map').src = staticMapUrl(album.lat, album.lng);
-    const photos = document.querySelector('#modal-photos');
-    photos.innerHTML = album.photos.map((photo) => `<img src="${photo.src}" alt="${photo.alt}" />`).join('');
-    modal.showModal();
-  };
-
-  document.querySelector('#close-modal')?.addEventListener('click', () => modal.close());
-
-  document.querySelector('#logout')?.addEventListener('click', async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
-  });
-
-  const form = document.querySelector('#album-form');
-  let map;
-  let marker;
-
-  const initMap = () => {
-    map = L.map('picker-map').setView([22.3, 114.17], 4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
-
-    map.on('click', (event) => {
-      const { lat, lng } = event.latlng;
-      document.querySelector('#lat').value = lat.toFixed(4);
-      document.querySelector('#lng').value = lng.toFixed(4);
-      if (!marker) marker = L.marker([lat, lng]).addTo(map);
-      marker.setLatLng([lat, lng]);
-    });
-  };
-
-  form?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const files = Array.from(document.querySelector('#photos').files || []);
-    if (!files.length) return;
-
-    const photos = await Promise.all(
-      files.map(async (file, index) => {
-        const src = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(file);
-        });
-
-        return { src, alt: `${file.name}-${index + 1}` };
-      }),
-    );
-
-    const album = {
-      id: crypto.randomUUID(),
-      title: document.querySelector('#title').value,
-      description: document.querySelector('#description').value,
-      locationLabel: document.querySelector('#locationLabel').value,
-      lat: Number(document.querySelector('#lat').value),
-      lng: Number(document.querySelector('#lng').value),
-      cover: photos[0].src,
-      photos,
-    };
-
-    const current = JSON.parse(localStorage.getItem(storeKey) || '[]');
-    current.push(album);
-    localStorage.setItem(storeKey, JSON.stringify(current));
-    form.reset();
-    renderAlbums();
-  });
-
-  renderAlbums();
-  initMap();
-</script>
