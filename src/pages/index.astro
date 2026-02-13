@@ -1,50 +1,179 @@
 ---
 import BaseHead from '../components/BaseHead.astro';
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
-import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
+import { defaultAlbums } from '../data/albums';
+const albumsJson = JSON.stringify(defaultAlbums);
 ---
 
 <!doctype html>
 <html lang="en">
-	<head>
-		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
-	</head>
-	<body>
-		<Header />
-		<main>
-			<h1>🧑‍🚀 Hello, Astronaut!</h1>
-			<p>
-				Welcome to the official <a href="https://astro.build/">Astro</a> blog starter template. This
-				template serves as a lightweight, minimally-styled starting point for anyone looking to build
-				a personal website, blog, or portfolio with Astro.
-			</p>
-			<p>
-				This template comes with a few integrations already configured in your
-				<code>astro.config.mjs</code> file. You can customize your setup with
-				<a href="https://astro.build/integrations">Astro Integrations</a> to add tools like Tailwind,
-				React, or Vue to your project.
-			</p>
-			<p>Here are a few ideas on how to get started with the template:</p>
-			<ul>
-				<li>Edit this page in <code>src/pages/index.astro</code></li>
-				<li>Edit the site header items in <code>src/components/Header.astro</code></li>
-				<li>Add your name to the footer in <code>src/components/Footer.astro</code></li>
-				<li>Check out the included blog posts in <code>src/content/blog/</code></li>
-				<li>Customize the blog post page layout in <code>src/layouts/BlogPost.astro</code></li>
-			</ul>
-			<p>
-				Have fun! If you get stuck, remember to <a href="https://docs.astro.build/"
-					>read the docs
-				</a> or <a href="https://astro.build/chat">join us on Discord</a> to ask questions.
-			</p>
-			<p>
-				Looking for a blog template with a bit more personality? Check out <a
-					href="https://github.com/Charca/astro-blog-template"
-					>astro-blog-template
-				</a> by <a href="https://twitter.com/Charca">Maxi Ferreira</a>.
-			</p>
-		</main>
-		<Footer />
-	</body>
+  <head>
+    <BaseHead title="Valentine's Albums" description="Private Valentine's Day memory albums" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body class="page">
+    <main>
+      <section class="hero">
+        <h1>💘 Our Valentine's Collection</h1>
+        <p>Tap an album for a photo story + map pin for where each memory happened.</p>
+        <button id="logout">Lock site</button>
+      </section>
+
+      <section>
+        <h2>Albums</h2>
+        <div id="album-grid" class="album-grid"></div>
+      </section>
+
+      <section class="manager">
+        <h2>Album Manager</h2>
+        <p>Upload images, set a pin on the map, and save instantly (stored in your browser).</p>
+        <form id="album-form">
+          <input id="title" placeholder="Album title" required />
+          <input id="description" placeholder="Description" required />
+          <input id="locationLabel" placeholder="Location label (e.g. Paris, France)" required />
+          <div class="map-grid">
+            <input id="lat" type="number" step="0.0001" placeholder="Latitude" required />
+            <input id="lng" type="number" step="0.0001" placeholder="Longitude" required />
+          </div>
+          <input id="photos" type="file" accept="image/*" multiple required />
+          <div id="picker-map"></div>
+          <button type="submit">Save Album</button>
+        </form>
+      </section>
+    </main>
+
+    <dialog id="album-modal">
+      <article>
+        <button id="close-modal" class="close">✕</button>
+        <h3 id="modal-title"></h3>
+        <p id="modal-description"></p>
+        <div id="modal-photos" class="modal-photos"></div>
+        <img id="modal-map" alt="Album location map" />
+      </article>
+    </dialog>
+
+    <script type="application/json" id="default-albums" set:html={albumsJson}></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  </body>
 </html>
+
+<style>
+  .page { background: linear-gradient(180deg,#fff0f5,#ffd7e4 45%,#fff); min-height: 100vh; color: #52152f; }
+  main { width: min(1020px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; display: grid; gap: 1.5rem; }
+  .hero { background: linear-gradient(120deg,#ff6ca0,#ff3d80); color: #fff; border-radius: 20px; padding: 2rem; box-shadow: 0 12px 30px rgba(196,18,85,.28); }
+  #logout { border: 0; border-radius: 999px; padding: .65rem 1rem; cursor: pointer; }
+  .album-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); }
+  .card { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #ffd0df; box-shadow: 0 10px 20px rgba(128,32,71,.1); cursor: pointer; transition: transform .2s ease, box-shadow .25s ease; }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 16px 28px rgba(128,32,71,.2); }
+  .card img { width: 100%; height: 180px; object-fit: cover; border-radius: 0; }
+  .card .content { padding: .85rem; }
+  .manager { background: #fff; border: 1px solid #ffd0df; border-radius: 18px; padding: 1rem; }
+  form { display: grid; gap: .8rem; }
+  input, button { padding: .75rem; border-radius: 10px; border: 1px solid #f4a6c0; }
+  .map-grid { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
+  #picker-map { height: 260px; border-radius: 12px; border: 1px solid #f4a6c0; }
+  dialog { border: 0; border-radius: 14px; width: min(860px, calc(100% - 2rem)); }
+  dialog::backdrop { background: rgba(30,0,14,.5); backdrop-filter: blur(2px); }
+  article { position: relative; }
+  .close { position: absolute; top: .5rem; right: .5rem; border: 0; background: #fff; cursor: pointer; }
+  .modal-photos { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: .7rem; margin: .8rem 0; }
+  #modal-map { width: 100%; border-radius: 10px; }
+</style>
+
+<script>
+  const defaults = JSON.parse(document.querySelector('#default-albums')?.textContent || '[]');
+  const storeKey = 'valentine-custom-albums';
+  const albumGrid = document.querySelector('#album-grid');
+  const modal = document.querySelector('#album-modal');
+
+  const getAlbums = () => {
+    const custom = JSON.parse(localStorage.getItem(storeKey) || '[]');
+    return [...defaults, ...custom];
+  };
+
+  const staticMapUrl = (lat, lng) => `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=12&size=900x360&markers=${lat},${lng},red-pushpin`;
+
+  const renderAlbums = () => {
+    albumGrid.innerHTML = '';
+    getAlbums().forEach((album) => {
+      const card = document.createElement('button');
+      card.className = 'card';
+      card.innerHTML = `<img src="${album.cover}" alt="${album.title}" /><div class="content"><strong>${album.title}</strong><p>${album.description}</p></div>`;
+      card.addEventListener('click', () => openAlbum(album));
+      albumGrid.append(card);
+    });
+  };
+
+  const openAlbum = (album) => {
+    document.querySelector('#modal-title').textContent = `${album.title} — ${album.locationLabel}`;
+    document.querySelector('#modal-description').textContent = album.description;
+    document.querySelector('#modal-map').src = staticMapUrl(album.lat, album.lng);
+    const photos = document.querySelector('#modal-photos');
+    photos.innerHTML = album.photos.map((photo) => `<img src="${photo.src}" alt="${photo.alt}" />`).join('');
+    modal.showModal();
+  };
+
+  document.querySelector('#close-modal')?.addEventListener('click', () => modal.close());
+
+  document.querySelector('#logout')?.addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  });
+
+  const form = document.querySelector('#album-form');
+  let map;
+  let marker;
+
+  const initMap = () => {
+    map = L.map('picker-map').setView([22.3, 114.17], 4);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    map.on('click', (event) => {
+      const { lat, lng } = event.latlng;
+      document.querySelector('#lat').value = lat.toFixed(4);
+      document.querySelector('#lng').value = lng.toFixed(4);
+      if (!marker) marker = L.marker([lat, lng]).addTo(map);
+      marker.setLatLng([lat, lng]);
+    });
+  };
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const files = Array.from(document.querySelector('#photos').files || []);
+    if (!files.length) return;
+
+    const photos = await Promise.all(
+      files.map(async (file, index) => {
+        const src = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+
+        return { src, alt: `${file.name}-${index + 1}` };
+      }),
+    );
+
+    const album = {
+      id: crypto.randomUUID(),
+      title: document.querySelector('#title').value,
+      description: document.querySelector('#description').value,
+      locationLabel: document.querySelector('#locationLabel').value,
+      lat: Number(document.querySelector('#lat').value),
+      lng: Number(document.querySelector('#lng').value),
+      cover: photos[0].src,
+      photos,
+    };
+
+    const current = JSON.parse(localStorage.getItem(storeKey) || '[]');
+    current.push(album);
+    localStorage.setItem(storeKey, JSON.stringify(current));
+    form.reset();
+    renderAlbums();
+  });
+
+  renderAlbums();
+  initMap();
+</script>
